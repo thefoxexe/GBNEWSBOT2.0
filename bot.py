@@ -1,31 +1,43 @@
+import os
 from telethon import TelegramClient, events
 from googletrans import Translator
-import os
 
-# Récupération des variables d'environnement
-api_id = os.getenv('API_ID')  # Remplacer par votre API_ID
-api_hash = os.getenv('API_HASH')  # Remplacer par votre API_HASH
-bot_token = os.getenv('BOT_TOKEN')  # Remplacer par votre BOT_TOKEN
-source_channel = os.getenv('SOURCE_CHANNEL')  # Canaux source à suivre
-target_channel = os.getenv('TARGET_CHANNEL')  # Canaux cible où envoyer les messages
+# Récupérer les variables d'environnement
+api_id = os.getenv('API_ID')
+api_hash = os.getenv('API_HASH')
+bot_token = os.getenv('BOT_TOKEN')
+source_channels = os.getenv('SOURCE_CHANNELS').split(',')  # Liste des canaux sources
+target_channel = os.getenv('TARGET_CHANNEL')
 
+# Créer le client Telegram
 client = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
+
+# Initialiser le traducteur
 translator = Translator()
 
 # Fonction pour traduire un message
-def translate_message(message_text, src_lang='auto', dest_lang='fr'):
-    translated = translator.translate(message_text, src=src_lang, dest=dest_lang)
-    return translated.text
+def translate_message(message):
+    try:
+        translated = translator.translate(message, src='auto', dest='fr')  # Langue cible ici 'fr' (français)
+        return translated.text
+    except Exception as e:
+        print(f"Erreur lors de la traduction: {e}")
+        return message
 
-# Écoute des messages du canal source
-@client.on(events.NewMessage(chats=source_channel))
-async def handler(event):
-    original_message = event.message.text
-    translated_message = translate_message(original_message, src_lang='auto', dest_lang='fr')
+# Fonction pour envoyer le message traduit au canal cible
+async def forward_message(event):
+    # Traduire le message
+    translated_message = translate_message(event.message.text)
     
-    # Envoie le message traduit vers le canal cible
+    # Envoyer le message traduit au canal cible
     await client.send_message(target_channel, translated_message)
 
-# Démarre le bot
+# Ajouter des écouteurs d'événements pour chaque canal source
+for channel in source_channels:
+    @client.on(events.NewMessage(chats=channel))
+    async def handler(event):
+        await forward_message(event)
+
+# Lancer le client
 client.start()
 client.run_until_disconnected()
